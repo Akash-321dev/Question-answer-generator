@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduGenAI – AI-Powered PDF Question Generation & Learning Assistant</title>
+  <meta name="description" content="Local RAG pipeline for study materials with zero API cost, automated grading, and weak-topic recommendations.">
+  
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-body-tertiary">
+
+  <!-- Top Navigation Bar -->
+  <nav class="navbar navbar-expand-lg border-bottom sticky-top bg-dark bg-opacity-75 backdrop-blur">
+    <div class="container-fluid px-lg-4">
+      <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+        <div class="brand-icon d-flex align-items-center justify-content-center">
+          <i class="bi bi-mortarboard-fill text-primary"></i>
+        </div>
+        <span class="fw-bold tracking-tight">Edu<span class="text-primary">GenAI</span></span>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill ms-2 text-xs">Local RAG</span>
+      </a>
+
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="navContent">
+        <!-- Main Navigation Tabs -->
+        <ul class="nav nav-pills ms-auto my-2 my-lg-0" id="mainTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active d-flex align-items-center gap-2" id="upload-tab" data-bs-toggle="pill" data-bs-target="#upload-pane" type="button" role="tab">
+              <i class="bi bi-file-earmark-arrow-up"></i>
+              <span>Upload & Generate</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link d-flex align-items-center gap-2 position-relative" id="quiz-tab" data-bs-toggle="pill" data-bs-target="#quiz-pane" type="button" role="tab">
+              <i class="bi bi-patch-question"></i>
+              <span>Active Quiz</span>
+              <span id="quizBadge" class="badge rounded-pill bg-danger d-none">New</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link d-flex align-items-center gap-2" id="analytics-tab" data-bs-toggle="pill" data-bs-target="#analytics-pane" type="button" role="tab">
+              <i class="bi bi-graph-up-arrow"></i>
+              <span>Analytics & Weak Topics</span>
+            </button>
+          </li>
+        </ul>
+
+        <!-- Backend Status Indicator -->
+        <div class="d-flex align-items-center gap-2 ms-lg-3 border-start ps-lg-3 py-1 text-muted text-sm">
+          <span class="status-dot online" id="ollamaStatusDot"></span>
+          <span id="ollamaStatusText" class="text-xs">Checking LLM...</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="container-fluid px-lg-4 py-4">
+    <div class="tab-content" id="mainTabContent">
+
+      <!-- ================= 1. UPLOAD & GENERATE PANE ================= -->
+      <div class="tab-pane fade show active" id="upload-pane" role="tabpanel">
+        <div class="row g-4">
+          
+          <!-- Left Column: Document Upload & Indexing -->
+          <div class="col-lg-6">
+            <div class="card h-100 shadow-sm border-0 glass-panel">
+              <div class="card-body p-4 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <div class="icon-circle bg-primary bg-opacity-10 text-primary">
+                    <i class="bi bi-cloud-arrow-up fs-4"></i>
+                  </div>
+                  <div>
+                    <h5 class="card-title fw-bold mb-0">1. Upload Study Material</h5>
+                    <p class="text-muted text-sm mb-0">PDF notes, slides, or chapters up to 20 MB</p>
+                  </div>
+                </div>
+
+                <!-- Dropzone Area -->
+                <div class="upload-dropzone p-4 text-center my-3 rounded-4 cursor-pointer" id="dropzone">
+                  <input type="file" id="pdfFileInput" accept=".pdf" class="d-none">
+                  <div class="upload-icon-wrapper mb-2">
+                    <i class="bi bi-file-earmark-pdf text-danger fs-1"></i>
+                  </div>
+                  <h6 class="fw-semibold mb-1" id="fileUploadTitle">Drag & Drop PDF or Click to Browse</h6>
+                  <p class="text-muted text-xs mb-3" id="fileUploadHint">Supported: .pdf (Max: 20MB). Extracted page-by-page via PyMuPDF.</p>
+                  <button type="button" class="btn btn-outline-primary btn-sm px-3 rounded-pill" id="selectFileBtn">
+                    <i class="bi bi-folder2-open me-1"></i> Choose File
+                  </button>
+                </div>
+
+                <!-- Selected File Info -->
+                <div id="fileInfoBox" class="p-3 bg-dark-subtle rounded-3 mb-3 d-none">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2 text-truncate">
+                      <i class="bi bi-file-text text-primary"></i>
+                      <span id="selectedFileName" class="fw-medium text-truncate">notes.pdf</span>
+                      <span id="selectedFileSize" class="text-muted text-xs">(1.2 MB)</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger border-0 p-1" id="clearFileBtn" title="Remove File">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Quick Samples Selector -->
+                <div class="mb-3">
+                  <label class="form-label text-xs text-uppercase tracking-wider text-muted fw-bold mb-2">
+                    Or Try Built-in Study Material:
+                  </label>
+                  <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill sample-btn" data-sample="os">
+                      <i class="bi bi-cpu me-1"></i> Operating Systems (OS)
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill sample-btn" data-sample="ai">
+                      <i class="bi bi-robot me-1"></i> Neural Networks & AI
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill sample-btn" data-sample="bio">
+                      <i class="bi bi-virus me-1"></i> Molecular Genetics
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Action Button -->
+                <div class="mt-auto pt-2">
+                  <button class="btn btn-primary w-100 py-2 fw-semibold rounded-3 d-flex align-items-center justify-content-center gap-2" id="uploadBtn">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                    <span>Process & Vectorize Document</span>
+                  </button>
+                </div>
+
+                <!-- Indexing Spinner Overlay -->
+                <div id="indexingSpinner" class="indexing-overlay d-none">
+                  <div class="spinner-border text-primary mb-3" role="status"></div>
+                  <h6 class="fw-bold mb-1">Indexing Document with Local RAG...</h6>
+                  <p class="text-muted text-xs mb-0" id="indexingStepText">Extracting text & generating 384-d MiniLM vectors</p>
+                </div>
+
+                <!-- Index Success Notification -->
+                <div id="uploadSuccessAlert" class="alert alert-success d-none mt-3 mb-0 text-sm">
+                  <div class="d-flex align-items-start gap-2">
+                    <i class="bi bi-check-circle-fill fs-5 mt-1"></i>
+                    <div>
+                      <strong id="alertDocName">Document Ready!</strong>
+                      <div id="alertDocDetails" class="text-xs mt-1">12 pages extracted, 45 searchable chunks in FAISS index.</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Quiz Generator Parameters -->
+          <div class="col-lg-6">
+            <div class="card h-100 shadow-sm border-0 glass-panel">
+              <div class="card-body p-4 d-flex flex-column">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <div class="icon-circle bg-success bg-opacity-10 text-success">
+                    <i class="bi bi-sliders fs-4"></i>
+                  </div>
+                  <div>
+                    <h5 class="card-title fw-bold mb-0">2. Configure Quiz Generator</h5>
+                    <p class="text-muted text-sm mb-0">Customize question format, difficulty, and sub-topic</p>
+                  </div>
+                </div>
+
+                <form id="quizConfigForm" class="d-flex flex-column flex-grow-1">
+                  <!-- Active Document Selector -->
+                  <div class="mb-3">
+                    <label for="documentSelect" class="form-label text-xs text-uppercase tracking-wider text-muted fw-bold">Active Document</label>
+                    <select class="form-select bg-dark-subtle" id="documentSelect" required>
+                      <option value="" disabled selected>Upload a document first...</option>
+                    </select>
+                  </div>
+
+                  <!-- Topic or Focus Query -->
+                  <div class="mb-3">
+                    <label for="topicQueryInput" class="form-label text-xs text-uppercase tracking-wider text-muted fw-bold">
+                      Sub-Topic or Keyword Focus <span class="text-muted fw-normal">(Optional)</span>
+                    </label>
+                    <div class="input-group">
+                      <span class="input-group-text bg-dark-subtle border-end-0"><i class="bi bi-search"></i></span>
+                      <input type="text" class="form-control bg-dark-subtle border-start-0" id="topicQueryInput" placeholder="e.g., Deadlocks, Backpropagation, DNA Transcription...">
+                    </div>
+                    <div class="form-text text-xs">Leave empty to cover all core concepts across the entire document.</div>
+                  </div>
+
+                  <!-- Question Type Grid -->
+                  <div class="mb-3">
+                    <label class="form-label text-xs text-uppercase tracking-wider text-muted fw-bold mb-2">Question Type</label>
+                    <div class="row g-2">
+                      <div class="col-6 col-md-3">
+                        <input type="radio" class="btn-check" name="questionType" id="typeMcq" value="MCQ" checked>
+                        <label class="btn btn-outline-secondary w-100 py-2 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="typeMcq">
+                          <i class="bi bi-ui-checks mb-1"></i>
+                          <span class="text-xs fw-semibold">MCQ</span>
+                        </label>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <input type="radio" class="btn-check" name="questionType" id="typeShort" value="Short Answer">
+                        <label class="btn btn-outline-secondary w-100 py-2 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="typeShort">
+                          <i class="bi bi-card-text mb-1"></i>
+                          <span class="text-xs fw-semibold">Short Ans</span>
+                        </label>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <input type="radio" class="btn-check" name="questionType" id="typeLong" value="Long Answer">
+                        <label class="btn btn-outline-secondary w-100 py-2 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="typeLong">
+                          <i class="bi bi-file-earmark-text mb-1"></i>
+                          <span class="text-xs fw-semibold">Long Ans</span>
+                        </label>
+                      </div>
+                      <div class="col-6 col-md-3">
+                        <input type="radio" class="btn-check" name="questionType" id="typeViva" value="Viva">
+                        <label class="btn btn-outline-secondary w-100 py-2 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="typeViva">
+                          <i class="bi bi-mic mb-1"></i>
+                          <span class="text-xs fw-semibold">Viva Voce</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Difficulty & Number of Questions -->
+                  <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                      <label class="form-label text-xs text-uppercase tracking-wider text-muted fw-bold">Difficulty</label>
+                      <select class="form-select bg-dark-subtle" id="difficultySelect">
+                        <option value="Easy">Easy (Foundational)</option>
+                        <option value="Medium" selected>Medium (Standard)</option>
+                        <option value="Hard">Hard (Analytical)</option>
+                      </select>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label text-xs text-uppercase tracking-wider text-muted fw-bold">Question Count</label>
+                      <select class="form-select bg-dark-subtle" id="numQuestionsSelect">
+                        <option value="3">3 Questions (Quick)</option>
+                        <option value="5" selected>5 Questions (Standard)</option>
+                        <option value="10">10 Questions (Comprehensive)</option>
+                        <option value="15">15 Questions (Mastery)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Submit Generate Button -->
+                  <div class="mt-auto pt-3">
+                    <button type="submit" class="btn btn-success w-100 py-2 fw-semibold rounded-3 d-flex align-items-center justify-content-center gap-2" id="generateQuizBtn">
+                      <i class="bi bi-magic"></i>
+                      <span>Generate Quiz with Local LLM</span>
+                    </button>
+                  </div>
+                </form>
+
+                <!-- Generation Spinner Overlay -->
+                <div id="generationSpinner" class="indexing-overlay d-none">
+                  <div class="spinner-border text-success mb-3" role="status"></div>
+                  <h6 class="fw-bold mb-1">Ollama is Generating Questions...</h6>
+                  <p class="text-muted text-xs mb-0">Retrieving top vector chunks & prompting local model</p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ================= 2. ACTIVE QUIZ PANE ================= -->
+      <div class="tab-pane fade" id="quiz-pane" role="tabpanel">
+        
+        <!-- Empty State (No Active Quiz) -->
+        <div id="quizEmptyState" class="text-center py-5">
+          <div class="icon-circle bg-secondary bg-opacity-10 text-secondary mx-auto mb-3" style="width: 70px; height: 70px;">
+            <i class="bi bi-journal-x fs-2"></i>
+          </div>
+          <h4 class="fw-bold">No Active Quiz</h4>
+          <p class="text-muted text-sm max-w-md mx-auto mb-4">
+            Upload a study PDF and click <strong>Generate Quiz</strong> to start your customized practice session!
+          </p>
+          <button class="btn btn-primary rounded-pill px-4" id="goToUploadBtn">
+            <i class="bi bi-file-earmark-arrow-up me-1"></i> Go to Upload
+          </button>
+        </div>
+
+        <!-- Active Quiz Container -->
+        <div id="activeQuizContainer" class="d-none">
+          
+          <!-- Quiz Header & Timer Banner -->
+          <div class="card shadow-sm border-0 mb-4 glass-panel">
+            <div class="card-body p-3 p-md-4">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="badge bg-primary rounded-pill" id="quizMetaType">MCQ</span>
+                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill" id="quizMetaDifficulty">Medium</span>
+                    <span class="text-muted text-xs" id="quizMetaDoc">Document: Notes.pdf</span>
+                  </div>
+                  <h4 class="fw-bold mb-0" id="quizMetaTitle">Practice Quiz</h4>
+                </div>
+
+                <!-- Timer & Score Gauge -->
+                <div class="d-flex align-items-center gap-3">
+                  <div class="d-flex align-items-center gap-2 px-3 py-2 bg-dark-subtle rounded-pill border">
+                    <i class="bi bi-stopwatch text-warning"></i>
+                    <span id="quizTimer" class="font-monospace fw-bold">00:00</span>
+                  </div>
+                  <div class="text-end">
+                    <span class="text-xs text-muted d-block">Progress</span>
+                    <span class="fw-bold" id="quizProgressText">0 / 5 Answered</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Progress Bar -->
+              <div class="progress mt-3" style="height: 6px;">
+                <div id="quizProgressBar" class="progress-bar bg-primary" role="progressbar" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Questions List -->
+          <form id="quizSubmissionForm">
+            <div id="questionsContainer" class="d-flex flex-column gap-4">
+              <!-- Dynamically populated question cards -->
+            </div>
+
+            <!-- Quiz Action Bar -->
+            <div class="card border-0 shadow-sm mt-4 glass-panel sticky-bottom">
+              <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                <span class="text-muted text-sm">Review your answers before submitting for automated AI evaluation.</span>
+                <button type="submit" class="btn btn-primary px-4 py-2 rounded-pill fw-semibold" id="submitQuizBtn">
+                  <i class="bi bi-send-check-fill me-1"></i> Submit Quiz for Evaluation
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Evaluation Results Modal / Banner -->
+          <div id="evaluationResultsCard" class="card border-0 shadow-lg mt-4 glass-panel d-none">
+            <div class="card-body p-4">
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 border-bottom pb-3 mb-4">
+                <div>
+                  <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill mb-1">Completed</span>
+                  <h3 class="fw-bold mb-0">Evaluation Summary</h3>
+                </div>
+                <div class="d-flex align-items-center gap-4">
+                  <div class="text-center">
+                    <span class="text-xs text-muted d-block">Score</span>
+                    <h3 class="fw-bold text-primary mb-0" id="evalScoreText">0 / 0</h3>
+                  </div>
+                  <div class="text-center">
+                    <span class="text-xs text-muted d-block">Accuracy</span>
+                    <h3 class="fw-bold text-success mb-0" id="evalPercentageText">0%</h3>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Question-by-Question Feedback breakdown -->
+              <h5 class="fw-bold mb-3">Detailed Answers & Rubric Breakdown</h5>
+              <div id="evalBreakdownContainer" class="d-flex flex-column gap-3 mb-4">
+                <!-- Injected feedback cards -->
+              </div>
+
+              <div class="d-flex gap-2 justify-content-end">
+                <button class="btn btn-outline-secondary rounded-pill px-4" id="retakeQuizBtn">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i> Retake This Quiz
+                </button>
+                <button class="btn btn-primary rounded-pill px-4" id="viewAnalyticsBtn">
+                  <i class="bi bi-graph-up me-1"></i> View Weak-Topic Analytics
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ================= 3. ANALYTICS & WEAK TOPICS PANE ================= -->
+      <div class="tab-pane fade" id="analytics-pane" role="tabpanel">
+        
+        <!-- Summary KPI Cards -->
+        <div class="row g-3 mb-4">
+          <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 glass-panel h-100">
+              <span class="text-xs text-uppercase tracking-wider text-muted fw-bold">Quizzes Taken</span>
+              <h2 class="fw-bold my-2 text-primary" id="kpiQuizzes">0</h2>
+              <span class="text-xs text-muted"><i class="bi bi-journal-check me-1"></i> Across all documents</span>
+            </div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 glass-panel h-100">
+              <span class="text-xs text-uppercase tracking-wider text-muted fw-bold">Questions Answered</span>
+              <h2 class="fw-bold my-2 text-info" id="kpiQuestions">0</h2>
+              <span class="text-xs text-muted"><i class="bi bi-ui-checks-grid me-1"></i> All types evaluated</span>
+            </div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 glass-panel h-100">
+              <span class="text-xs text-uppercase tracking-wider text-muted fw-bold">Overall Accuracy</span>
+              <h2 class="fw-bold my-2 text-success" id="kpiAccuracy">0%</h2>
+              <span class="text-xs text-muted"><i class="bi bi-bullseye me-1"></i> Cumulative score</span>
+            </div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 glass-panel h-100">
+              <span class="text-xs text-uppercase tracking-wider text-muted fw-bold">Identified Weak Topics</span>
+              <h2 class="fw-bold my-2 text-danger" id="kpiWeakTopics">0</h2>
+              <span class="text-xs text-muted"><i class="bi bi-exclamation-triangle me-1"></i> Accuracy &lt; 60%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4">
+          
+          <!-- Left: Weak Topics & Recommendations -->
+          <div class="col-lg-5">
+            <div class="card border-0 shadow-sm glass-panel h-100">
+              <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                  <i class="bi bi-lightning-charge text-warning fs-4"></i>
+                  <h5 class="fw-bold mb-0">Targeted Study Recommendations</h5>
+                </div>
+                <p class="text-muted text-xs mb-3">
+                  Automated advice based on questions you missed or scored low on during practice:
+                </p>
+
+                <div id="recommendationsList" class="d-flex flex-column gap-2 mb-4">
+                  <!-- Injected recommendations -->
+                  <div class="p-3 bg-dark-subtle rounded-3 text-muted text-sm">
+                    Complete your first quiz to generate personalized recommendations!
+                  </div>
+                </div>
+
+                <h6 class="fw-bold text-xs text-uppercase tracking-wider text-muted mb-2">Weak Topics Needing Reinforcement:</h6>
+                <div id="weakTopicsPills" class="d-flex flex-wrap gap-2">
+                  <span class="text-muted text-xs">No weak topics identified yet!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Topic Mastery Breakdown -->
+          <div class="col-lg-7">
+            <div class="card border-0 shadow-sm glass-panel h-100">
+              <div class="card-body p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-bar-chart-line text-primary fs-4"></i>
+                    <h5 class="fw-bold mb-0">Topic-Wise Accuracy Breakdown</h5>
+                  </div>
+                  <span class="text-muted text-xs">Goal: &ge; 80%</span>
+                </div>
+
+                <div id="topicProgressContainer" class="d-flex flex-column gap-3">
+                  <!-- Injected topic bars -->
+                  <div class="text-center py-4 text-muted text-sm">
+                    No topic analytics recorded yet.
+                  </div>
+                </div>
+
+                <!-- Past Attempts History Table -->
+                <h6 class="fw-bold text-xs text-uppercase tracking-wider text-muted mt-4 mb-3">Recent Quiz History</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle text-sm mb-0">
+                    <thead class="text-muted text-xs">
+                      <tr>
+                        <th>Date & Time</th>
+                        <th>Score</th>
+                        <th>Accuracy</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="recentAttemptsTbody">
+                      <tr>
+                        <td colspan="4" class="text-center text-muted py-3">No history yet.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Bootstrap 5 JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Custom JS -->
+  <script src="app.js"></script>
+</body>
+</html>

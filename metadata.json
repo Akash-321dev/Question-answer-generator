@@ -1,0 +1,6 @@
+{
+  "name": "EduGenAI – AI-Powered PDF Question Generation & Learning Assistant",
+  "description": "Convert study PDFs into personalized practice questions with local RAG, automated quiz evaluation, and weak-topic analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
